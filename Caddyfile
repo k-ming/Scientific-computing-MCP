@@ -1,0 +1,7 @@
+# 使用 nip.io 免费泛解析域名（无需注册），Caddy 会自动申请并续期
+# Let's Encrypt 证书，从而对外提供 HTTPS 访问。
+# 把下面的 IP 换成你服务器的实际公网 IP。
+34.4.106.148.nip.io {
+	# 将请求反向代理到内部的 MCP 服务容器（compose 服务名:端口）。
+	reverse_proxy scicalc-mcp:8000
+}

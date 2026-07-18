@@ -6,8 +6,9 @@ services:
     image: scicalc-mcp:latest
     container_name: scicalc-mcp
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # 不再对公网直接暴露 8000，只在容器内部网络供 Caddy 访问。
+    expose:
+      - "8000"
     environment:
       # 远程部署使用 HTTP 传输，监听 8000 端口。
       MCP_TRANSPORT: streamable-http
@@ -20,3 +21,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      # Caddy 对外提供 HTTP(80) 与 HTTPS(443)。80 用于 Let's Encrypt 证书验证。
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 持久化证书，避免每次重建都重新申请（有频率限制）。
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - scicalc-mcp
+
+volumes:
+  caddy_data:
+  caddy_config:
