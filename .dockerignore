@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.git/
+.gitignore
+.pytest_cache/
+scripts/
+k8s/
+*.md

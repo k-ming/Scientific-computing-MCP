@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scicalc-mcp
+  labels:
+    app: scicalc-mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: scicalc-mcp
+  template:
+    metadata:
+      labels:
+        app: scicalc-mcp
+    spec:
+      containers:
+        - name: scicalc-mcp
+          # 替换为你的镜像地址，例如 Artifact Registry 中的镜像
+          # <REGION>-docker.pkg.dev/<PROJECT_ID>/<REPO>/scicalc-mcp:latest
+          image: REGION-docker.pkg.dev/PROJECT_ID/REPO/scicalc-mcp:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MCP_TRANSPORT
+              value: "streamable-http"
+            - name: MCP_HOST
+              value: "0.0.0.0"
+            - name: MCP_PORT
+              value: "8000"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          # 使用 TCP 探针检测端口存活。MCP 的 /mcp 端点对普通 GET
+          # 会返回 4xx（要求特定 Accept 头），不适合作 HTTP 探针。
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20

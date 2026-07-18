@@ -1,0 +1,23 @@
+# 通过 GKE 内置的 GCE Ingress 对外暴露服务。
+# 建议为生产环境配置 HTTPS（托管证书）。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: scicalc-mcp
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    # 如需静态 IP，先在 GCP 预留全局地址并在此填写名称：
+    # kubernetes.io/ingress.global-static-ip-name: "scicalc-mcp-ip"
+    # 如需托管 TLS 证书，取消下面注释并创建 ManagedCertificate：
+    # networking.gke.io/managed-certificates: "scicalc-mcp-cert"
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: scicalc-mcp
+                port:
+                  number: 80
