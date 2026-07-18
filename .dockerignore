@@ -8,4 +8,5 @@ __pycache__/
 .pytest_cache/
 scripts/
 k8s/
-*.md
+# 注意：不要忽略 *.md，因为 pyproject.toml 的 readme 字段引用了 README.md，
+# 构建镜像时需要它。

@@ -17,7 +17,9 @@ ENV MCP_TRANSPORT=streamable-http \
 WORKDIR /app
 
 # 先复制依赖清单以充分利用镜像层缓存。
-COPY pyproject.toml requirements.txt ./
+# README.md 必须一并复制，因为 pyproject.toml 通过 readme 字段引用它，
+# 缺少会导致 hatchling 构建时报 "Readme file does not exist"。
+COPY pyproject.toml requirements.txt README.md ./
 COPY src ./src
 
 # 安装项目及其依赖。

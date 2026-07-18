@@ -1,0 +1,22 @@
+services:
+  scicalc-mcp:
+    build:
+      context: ./Scientific-computing-MCP
+      dockerfile: Dockerfile
+    image: scicalc-mcp:latest
+    container_name: scicalc-mcp
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 远程部署使用 HTTP 传输，监听 8000 端口。
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8000"
+    healthcheck:
+      # MCP 的 /mcp 端点对普通请求会返回 4xx，这里只探测端口是否在监听。
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8000)); s.close()\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
