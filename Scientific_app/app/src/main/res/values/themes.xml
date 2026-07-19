@@ -1,0 +1,7 @@
+<resources>
+    <!-- Compose 应用使用无 ActionBar 的主题即可，具体样式由 Compose 的
+         MaterialTheme 控制，不依赖 AppCompat。 -->
+    <style name="Theme.ScientificAgent" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/white</item>
+    </style>
+</resources>

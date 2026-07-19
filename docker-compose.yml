@@ -22,6 +22,28 @@ services:
       retries: 3
       start_period: 10s
 
+  kiro-gateway:
+    build:
+      context: ./Scientific-computing-MCP/kiro_gateway
+      dockerfile: Dockerfile
+    image: kiro-gateway:latest
+    container_name: kiro-gateway
+    restart: unless-stopped
+    expose:
+      - "9000"
+    environment:
+      # Kiro headless 认证所需的 API Key（从 .env 注入，勿硬编码）。
+      KIRO_API_KEY: ${KIRO_API_KEY}
+      # 网关自身的访问令牌，安卓 app 用它做 Bearer 鉴权。
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN}
+      # 单次执行超时（秒）。
+      KIRO_TIMEOUT: "180"
+    volumes:
+      # 挂载 Kiro CLI 的 MCP 配置，使其能调用内部的 scicalc-mcp 服务。
+      - ./Scientific-computing-MCP/kiro_gateway/kiro-mcp.json:/root/.kiro/settings/mcp.json:ro
+    depends_on:
+      - scicalc-mcp
+
   caddy:
     image: caddy:2-alpine
     container_name: caddy
@@ -37,6 +59,7 @@ services:
       - caddy_config:/config
     depends_on:
       - scicalc-mcp
+      - kiro-gateway
 
 volumes:
   caddy_data:

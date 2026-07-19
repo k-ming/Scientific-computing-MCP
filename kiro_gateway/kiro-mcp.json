@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "scicalc": {
+      "url": "http://scicalc-mcp:8000/mcp",
+      "disabled": false,
+      "autoApprove": [
+        "matrix_multiply",
+        "matrix_inverse",
+        "determinant",
+        "solve_linear_system",
+        "eigen",
+        "describe",
+        "correlation",
+        "t_test",
+        "linear_regression",
+        "integrate_function",
+        "find_root",
+        "minimize_function",
+        "interpolate_values",
+        "dataframe_describe",
+        "dataframe_groupby_aggregate",
+        "dataframe_correlation_matrix",
+        "plot_line",
+        "plot_function",
+        "plot_histogram"
+      ]
+    }
+  }
+}

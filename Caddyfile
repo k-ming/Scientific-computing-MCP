@@ -2,6 +2,18 @@
 # Let's Encrypt 证书，从而对外提供 HTTPS 访问。
 # 把下面的 IP 换成你服务器的实际公网 IP。
 34.4.106.148.nip.io {
-	# 将请求反向代理到内部的 MCP 服务容器（compose 服务名:端口）。
-	reverse_proxy scicalc-mcp:8000
+	# /v1/* 路由到 Kiro OpenAI 兼容网关，供安卓 app 作为 LLM 接口使用。
+	handle /v1/* {
+		reverse_proxy kiro-gateway:9000
+	}
+
+	# /health 路由到网关的健康检查。
+	handle /health {
+		reverse_proxy kiro-gateway:9000
+	}
+
+	# 其余请求（如 /mcp）反向代理到 scicalc MCP 服务容器。
+	handle {
+		reverse_proxy scicalc-mcp:8000
+	}
 }
