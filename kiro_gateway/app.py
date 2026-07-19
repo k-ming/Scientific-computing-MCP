@@ -169,36 +169,51 @@ async def health() -> dict:
     return {"status": "ok", "kiro_cli_found": bool(shutil.which(KIRO_CLI))}
 
 
-def _parse_models(raw: str) -> list[str]:
-    """解析 kiro-cli chat --list-models 的输出，提取模型名列表。
+def _extract_model_id(item: dict) -> str | None:
+    """从单个模型对象里提取模型标识。"""
+    return (
+        item.get("model_id")
+        or item.get("id")
+        or item.get("model_name")
+        or item.get("name")
+        or item.get("model")
+    )
 
-    优先按 JSON 解析；失败则按纯文本逐行提取（去掉 ANSI、标记符、空行）。
+
+def _parse_models(raw: str) -> list[str]:
+    """解析 kiro-cli chat --list-models --format json 的输出，提取模型 ID 列表。
+
+    实际输出结构为：{"models":[{"model_id":"...","model_name":"...",...}], "default_model":"auto"}
+    同时兼容纯数组、纯文本等其它可能格式。
     """
     raw = clean_cli_output(raw)
-    # 尝试 JSON
     try:
         import json as _json
         data = _json.loads(raw)
-        if isinstance(data, list):
-            names = []
-            for item in data:
+        items = None
+        if isinstance(data, dict):
+            items = data.get("models") or data.get("data")
+        elif isinstance(data, list):
+            items = data
+        if isinstance(items, list):
+            names: list[str] = []
+            for item in items:
                 if isinstance(item, str):
                     names.append(item)
                 elif isinstance(item, dict):
-                    name = item.get("id") or item.get("name") or item.get("model")
+                    name = _extract_model_id(item)
                     if name:
                         names.append(str(name))
             if names:
                 return names
     except Exception:  # noqa: BLE001
         pass
-    # 纯文本：逐行清洗，去掉列表符号/当前选中标记等。
+    # 纯文本回退：逐行清洗。
     models = []
     for line in raw.splitlines():
         s = line.strip().lstrip("*-•>").strip()
-        # 去掉形如 "(current)"、"(default)" 的后缀标注。
         s = re.sub(r"\s*\((current|default|active)\)\s*$", "", s, flags=re.I)
-        if s and " " not in s:  # 模型名一般不含空格
+        if s and " " not in s:
             models.append(s)
     return models
 
@@ -219,9 +234,9 @@ async def list_models() -> dict:
         except Exception as e:  # noqa: BLE001
             logger.warning("列出模型异常: %s", e)
 
-    # 始终包含占位别名，客户端选它表示"用账号默认模型"。
-    if DEFAULT_MODEL_ALIAS not in ids:
-        ids.insert(0, DEFAULT_MODEL_ALIAS)
+    # 拉取失败时，至少给出占位别名（表示用账号默认模型）。
+    if not ids:
+        ids = [DEFAULT_MODEL_ALIAS]
 
     return {
         "object": "list",
