@@ -5,9 +5,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# 安装 Kiro CLI 所需的基础工具。
+# 安装 Kiro CLI 所需的基础工具（unzip 为安装脚本所必需）。
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates bash git \
+    && apt-get install -y --no-install-recommends curl ca-certificates bash git unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Kiro CLI（官方安装脚本）。
