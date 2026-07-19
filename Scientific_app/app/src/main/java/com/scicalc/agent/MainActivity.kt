@@ -58,6 +58,8 @@ private fun AppRoot(viewModel: ChatViewModel) {
     val messages by viewModel.messages.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val config by viewModel.config.collectAsState()
+    val models by viewModel.models.collectAsState()
+    val loadingModels by viewModel.loadingModels.collectAsState()
 
     Scaffold(
         bottomBar = {
@@ -79,10 +81,21 @@ private fun AppRoot(viewModel: ChatViewModel) {
     ) { padding ->
         when (tab) {
             0 -> androidx.compose.foundation.layout.Box(Modifier.padding(padding)) {
-                ChatScreen(messages = messages, busy = busy, onSend = viewModel::send)
+                ChatScreen(
+                    messages = messages,
+                    busy = busy,
+                    onSend = viewModel::send,
+                    onClear = viewModel::clearChat,
+                )
             }
             else -> androidx.compose.foundation.layout.Box(Modifier.padding(padding)) {
-                SettingsScreen(initial = config, onSave = viewModel::saveConfig)
+                SettingsScreen(
+                    initial = config,
+                    models = models,
+                    loadingModels = loadingModels,
+                    onRefreshModels = viewModel::refreshModels,
+                    onSave = viewModel::saveConfig,
+                )
             }
         }
     }

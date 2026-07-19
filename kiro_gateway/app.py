@@ -88,10 +88,52 @@ def build_prompt(messages: list[Message]) -> str:
     return "\n\n".join(parts).strip()
 
 
-async def run_kiro(prompt: str) -> str:
+# 网关自身的占位模型名，收到它时不切换 Kiro 模型（用账号默认）。
+DEFAULT_MODEL_ALIAS = "kiro"
+
+
+async def _run_cli(args: list[str], timeout: int) -> tuple[int, str, str]:
+    """运行一个 kiro-cli 子命令，返回 (returncode, stdout, stderr)。"""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env={**os.environ},
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    return (
+        proc.returncode or 0,
+        stdout.decode("utf-8", errors="replace").strip(),
+        stderr.decode("utf-8", errors="replace").strip(),
+    )
+
+
+async def set_default_model(model: str) -> None:
+    """通过 settings 把 Kiro 的默认对话模型设为指定值。
+
+    headless 的 chat 命令没有 --model 参数，因此用 chat.defaultModel 设置项
+    来切换模型。留空或占位别名则不改动，沿用账号默认模型。
+    """
+    if not model or model == DEFAULT_MODEL_ALIAS:
+        return
+    try:
+        code, _out, err = await _run_cli(
+            [KIRO_CLI, "settings", "chat.defaultModel", model], timeout=30
+        )
+        if code != 0:
+            logger.warning("设置模型 %s 失败: %s", model, err)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("设置模型 %s 异常: %s", model, e)
+
+
+async def run_kiro(prompt: str, model: str | None = None) -> str:
     """调用 Kiro CLI headless 并返回其标准输出文本。"""
     if not shutil.which(KIRO_CLI):
         raise HTTPException(status_code=500, detail=f"未找到 {KIRO_CLI}，请确认已安装 Kiro CLI。")
+
+    # 若客户端指定了具体模型，先设为默认模型。
+    if model:
+        await set_default_model(model)
 
     args = [KIRO_CLI, "chat", "--no-interactive"]
     if TRUST_TOOLS.strip():
@@ -100,25 +142,15 @@ async def run_kiro(prompt: str) -> str:
         args.append("--trust-all-tools")
     args.append(prompt)
 
-    logger.info("运行 Kiro CLI: %s ... (prompt %d 字符)", " ".join(args[:4]), len(prompt))
+    logger.info("运行 Kiro CLI: %s ... (prompt %d 字符, model=%s)", " ".join(args[:4]), len(prompt), model or "默认")
 
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env={**os.environ},
-    )
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=KIRO_TIMEOUT)
+        code, out, err = await _run_cli(args, timeout=KIRO_TIMEOUT)
     except asyncio.TimeoutError:
-        proc.kill()
         raise HTTPException(status_code=504, detail="Kiro CLI 执行超时。")
 
-    out = stdout.decode("utf-8", errors="replace").strip()
-    err = stderr.decode("utf-8", errors="replace").strip()
-
-    if proc.returncode != 0:
-        logger.error("Kiro CLI 失败 (code=%s): %s", proc.returncode, err)
+    if code != 0:
+        logger.error("Kiro CLI 失败 (code=%s): %s", code, err)
         raise HTTPException(status_code=502, detail=f"Kiro CLI 执行失败: {err or out}")
 
     return clean_cli_output(out) or "(Kiro 未返回文本输出)"
@@ -137,12 +169,63 @@ async def health() -> dict:
     return {"status": "ok", "kiro_cli_found": bool(shutil.which(KIRO_CLI))}
 
 
+def _parse_models(raw: str) -> list[str]:
+    """解析 kiro-cli chat --list-models 的输出，提取模型名列表。
+
+    优先按 JSON 解析；失败则按纯文本逐行提取（去掉 ANSI、标记符、空行）。
+    """
+    raw = clean_cli_output(raw)
+    # 尝试 JSON
+    try:
+        import json as _json
+        data = _json.loads(raw)
+        if isinstance(data, list):
+            names = []
+            for item in data:
+                if isinstance(item, str):
+                    names.append(item)
+                elif isinstance(item, dict):
+                    name = item.get("id") or item.get("name") or item.get("model")
+                    if name:
+                        names.append(str(name))
+            if names:
+                return names
+    except Exception:  # noqa: BLE001
+        pass
+    # 纯文本：逐行清洗，去掉列表符号/当前选中标记等。
+    models = []
+    for line in raw.splitlines():
+        s = line.strip().lstrip("*-•>").strip()
+        # 去掉形如 "(current)"、"(default)" 的后缀标注。
+        s = re.sub(r"\s*\((current|default|active)\)\s*$", "", s, flags=re.I)
+        if s and " " not in s:  # 模型名一般不含空格
+            models.append(s)
+    return models
+
+
 @app.get("/v1/models")
 async def list_models() -> dict:
-    """返回一个占位模型列表，方便部分客户端做模型选择。"""
+    """列出 Kiro 当前可用的模型，OpenAI /v1/models 格式。"""
+    ids: list[str] = []
+    if shutil.which(KIRO_CLI):
+        try:
+            code, out, err = await _run_cli(
+                [KIRO_CLI, "chat", "--list-models", "--format", "json"], timeout=30
+            )
+            if code == 0:
+                ids = _parse_models(out)
+            else:
+                logger.warning("列出模型失败: %s", err)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("列出模型异常: %s", e)
+
+    # 始终包含占位别名，客户端选它表示"用账号默认模型"。
+    if DEFAULT_MODEL_ALIAS not in ids:
+        ids.insert(0, DEFAULT_MODEL_ALIAS)
+
     return {
         "object": "list",
-        "data": [{"id": "kiro", "object": "model", "owned_by": "kiro"}],
+        "data": [{"id": mid, "object": "model", "owned_by": "kiro"} for mid in ids],
     }
 
 
@@ -157,7 +240,7 @@ async def chat_completions(
     if not prompt:
         raise HTTPException(status_code=400, detail="messages 为空。")
 
-    answer = await run_kiro(prompt)
+    answer = await run_kiro(prompt, model=req.model)
 
     now = int(time.time())
     response = {

@@ -61,6 +61,32 @@ class LlmClient(
         }
     }
 
+    private fun modelsEndpoint(): String {
+        val trimmed = baseUrl.trimEnd('/')
+        return when {
+            trimmed.endsWith("/v1") -> "$trimmed/models"
+            trimmed.endsWith("/chat/completions") -> trimmed.removeSuffix("/chat/completions") + "/models"
+            else -> "$trimmed/v1/models"
+        }
+    }
+
+    /** 拉取可用模型列表（OpenAI /v1/models 格式）。 */
+    suspend fun listModels(): List<String> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(modelsEndpoint())
+            .addHeader("Authorization", "Bearer $apiKey")
+            .get()
+            .build()
+        http.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) return@withContext emptyList()
+            val data = runCatching {
+                json.parseToJsonElement(raw).jsonObject["data"]?.jsonArray
+            }.getOrNull() ?: return@withContext emptyList()
+            data.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.content }
+        }
+    }
+
     /** 把 MCP 工具定义转换为 OpenAI tools 数组。 */
     fun toolsPayload(tools: List<McpTool>): JsonArray = buildJsonArray {
         tools.forEach { tool ->

@@ -8,6 +8,7 @@ import com.scicalc.agent.data.AppConfig
 import com.scicalc.agent.data.AppSettings
 import com.scicalc.agent.data.ChatMessage
 import com.scicalc.agent.data.Role
+import com.scicalc.agent.data.llm.LlmClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +25,13 @@ class ChatViewModel(private val settings: AppSettings) : ViewModel() {
 
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    // 可用模型列表（从网关 /v1/models 拉取）。
+    private val _models = MutableStateFlow<List<String>>(emptyList())
+    val models: StateFlow<List<String>> = _models.asStateFlow()
+
+    private val _loadingModels = MutableStateFlow(false)
+    val loadingModels: StateFlow<Boolean> = _loadingModels.asStateFlow()
 
     // 跨轮次保留的对话历史（OpenAI 消息格式）。
     private var history: MutableList<JsonObject>? = null
@@ -45,6 +53,31 @@ class ChatViewModel(private val settings: AppSettings) : ViewModel() {
 
     private fun append(message: ChatMessage) {
         _messages.value = _messages.value + message
+    }
+
+    /** 一键清空聊天记录，并重置对话历史。 */
+    fun clearChat() {
+        if (_busy.value) return
+        _messages.value = emptyList()
+        history = null
+    }
+
+    /**
+     * 用给定的连接参数拉取可用模型列表。
+     * 供设置页在填好 Base URL / API Key 后点击"刷新模型"时调用。
+     */
+    fun refreshModels(baseUrl: String, apiKey: String) {
+        if (baseUrl.isBlank() || apiKey.isBlank()) return
+        _loadingModels.value = true
+        viewModelScope.launch {
+            val list = try {
+                LlmClient(baseUrl, apiKey, "").listModels()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            _models.value = list
+            _loadingModels.value = false
+        }
     }
 
     fun send(userInput: String) {
