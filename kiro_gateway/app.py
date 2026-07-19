@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 import uuid
 import shutil
@@ -39,6 +40,18 @@ KIRO_TIMEOUT = int(os.environ.get("KIRO_TIMEOUT", "180"))
 TRUST_TOOLS = os.environ.get("KIRO_TRUST_TOOLS", "")
 
 app = FastAPI(title="Kiro OpenAI-compatible Gateway")
+
+# 匹配 ANSI 转义序列（颜色、光标控制等），用于清洗 CLI 输出。
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def clean_cli_output(text: str) -> str:
+    """去除 Kiro CLI 输出中的 ANSI 控制码与提示符，得到纯净文本。"""
+    # 移除 ANSI 转义序列。
+    cleaned = ANSI_ESCAPE_RE.sub("", text)
+    # 逐行去掉行首的 CLI 提示符 "> " 及多余空白。
+    lines = [re.sub(r"^\s*>\s?", "", line) for line in cleaned.splitlines()]
+    return "\n".join(lines).strip()
 
 
 class Message(BaseModel):
@@ -108,7 +121,7 @@ async def run_kiro(prompt: str) -> str:
         logger.error("Kiro CLI 失败 (code=%s): %s", proc.returncode, err)
         raise HTTPException(status_code=502, detail=f"Kiro CLI 执行失败: {err or out}")
 
-    return out or "(Kiro 未返回文本输出)"
+    return clean_cli_output(out) or "(Kiro 未返回文本输出)"
 
 
 def check_auth(authorization: str | None) -> None:
