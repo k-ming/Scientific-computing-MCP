@@ -42,9 +42,6 @@ services:
       # 保留 execute_bash（计算需要）与 fs_read（读文件）；
       # 禁用 fs_write、use_aws 等有副作用的工具，降低风险。
       KIRO_TRUST_TOOLS: "execute_bash,fs_read"
-    volumes:
-      # 挂载 Kiro CLI 的 MCP 配置，使其能调用内部的 scicalc-mcp 服务。
-      - ./Scientific-computing-MCP/kiro_gateway/kiro-mcp.json:/root/.kiro/settings/mcp.json:ro
     depends_on:
       - scicalc-mcp
 
